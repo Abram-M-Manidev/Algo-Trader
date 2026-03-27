@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Algo Trader · Global Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg:       #080c14;
+    --panel:    #0d1424;
+    --card:     #111827;
+    --border:   #1e293b;
+    --green:    #00ff88;
+    --red:      #ff4757;
+    --blue:     #38bdf8;
+    --purple:   #a78bfa;
+    --yellow:   #fbbf24;
+    --white:    #f1f5f9;
+    --gray:     #64748b;
+    --lgray:    #94a3b8;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--white);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Scanline overlay ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,255,136,0.012) 2px,
+      rgba(0,255,136,0.012) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* ── Header ── */
+  header {
+    background: linear-gradient(135deg, #0d1424 0%, #0a1628 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky; top: 0; z-index: 100;
+    backdrop-filter: blur(12px);
+  }
+
+  .logo {
+    font-family: 'Space Mono', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--green);
+    letter-spacing: 4px;
+    text-shadow: 0 0 20px rgba(0,255,136,0.4);
+  }
+
+  .logo span { color: var(--lgray); font-weight: 400; font-size: 12px; margin-left: 12px; }
+
+  .header-right {
+    display: flex; align-items: center; gap: 16px;
+  }
+
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.3; }
+  }
+
+  .last-update { font-size: 11px; color: var(--gray); font-family: 'Space Mono', monospace; }
+
+  /* ── Main layout ── */
+  main { padding: 24px 32px; max-width: 1600px; margin: auto; }
+
+  /* ── KPI strip ── */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .kpi {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color .2s;
+  }
+
+  .kpi:hover { border-color: var(--green); }
+
+  .kpi::before {
+    content: '';
+    position: absolute; top: 0; left: 0;
+    width: 3px; height: 100%;
+    background: var(--accent, var(--blue));
+  }
+
+  .kpi-label {
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--gray);
+    text-transform: uppercase;
+    font-family: 'Space Mono', monospace;
+    margin-bottom: 8px;
+  }
+
+  .kpi-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--accent, var(--white));
+    font-family: 'Space Mono', monospace;
+    line-height: 1;
+  }
+
+  .kpi-sub { font-size: 11px; color: var(--gray); margin-top: 6px; }
+
+  /* ── Two-col row ── */
+  .row-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .row-3 {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  @media (max-width: 1100px) {
+    .row-2, .row-3 { grid-template-columns: 1fr; }
+  }
+
+  /* ── Panel card ── */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    position: relative;
+  }
+
+  .panel-title {
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--lgray);
+    text-transform: uppercase;
+    font-family: 'Space Mono', monospace;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ── Charts ── */
+  .chart-wrap { position: relative; height: 220px; }
+  .chart-wrap-tall { position: relative; height: 280px; }
+
+  /* ── Market badges ── */
+  .market-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 10px;
+  }
+
+  .market-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 12px;
+    text-align: center;
+  }
+
+  .market-name { font-size: 10px; color: var(--gray); letter-spacing: 1px; margin-bottom: 6px; }
+  .market-prob { font-size: 22px; font-weight: 700; font-family: 'Space Mono', monospace; }
+  .market-sub  { font-size: 10px; color: var(--gray); margin-top: 4px; }
+
+  /* ── Top bullish table ── */
+  .signal-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+
+  .signal-table th {
+    padding: 8px 10px;
+    text-align: left;
+    color: var(--gray);
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    font-family: 'Space Mono', monospace;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .signal-table td {
+    padding: 9px 10px;
+    border-bottom: 1px solid rgba(30,41,59,0.5);
+    color: var(--lgray);
+  }
+
+  .signal-table tr:hover td { background: rgba(56,189,248,0.04); }
+
+  .signal-table .ticker { color: var(--white); font-weight: 600; font-family: 'Space Mono', monospace; }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    font-family: 'Space Mono', monospace;
+  }
+
+  .badge-bull { background: rgba(0,255,136,0.12); color: var(--green); }
+  .badge-bear { background: rgba(255,71,87,0.12);  color: var(--red);   }
+  .badge-win  { background: rgba(0,255,136,0.12); color: var(--green); }
+  .badge-loss { background: rgba(255,71,87,0.12);  color: var(--red);   }
+
+  .prob-bar-wrap { position: relative; background: var(--border); border-radius: 2px; height: 6px; width: 80px; }
+  .prob-bar      { height: 100%; border-radius: 2px; transition: width .5s; }
+
+  /* ── Trade list ── */
+  .trade-scroll { max-height: 260px; overflow-y: auto; }
+  .trade-scroll::-webkit-scrollbar { width: 4px; }
+  .trade-scroll::-webkit-scrollbar-track { background: var(--panel); }
+  .trade-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* ── Loading state ── */
+  .loading {
+    display: flex; align-items: center; justify-content: center;
+    height: 120px; color: var(--gray); font-size: 13px;
+    font-family: 'Space Mono', monospace;
+    letter-spacing: 2px;
+  }
+
+  .loading::after {
+    content: '...';
+    animation: dots 1.2s infinite;
+  }
+
+  @keyframes dots {
+    0%   { content: '.'; }
+    33%  { content: '..'; }
+    66%  { content: '...'; }
+  }
+
+  /* ── Footer ── */
+  footer {
+    text-align: center;
+    padding: 24px;
+    color: var(--gray);
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    border-top: 1px solid var(--border);
+    margin-top: 32px;
+  }
+
+  .green  { color: var(--green) !important; }
+  .red    { color: var(--red)   !important; }
+  .blue   { color: var(--blue)  !important; }
+  .yellow { color: var(--yellow)!important; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">ALGO TRADER <span>· GLOBAL MARKET INTELLIGENCE v2</span></div>
+  <div class="header-right">
+    <div class="status-dot"></div>
+    <div class="last-update" id="lastUpdate">LOADING...</div>
+  </div>
+</header>
+
+<main>
+
+  <!-- KPI Strip -->
+  <div class="kpi-grid" id="kpiGrid">
+    <div class="kpi" style="--accent:var(--blue)">
+      <div class="kpi-label">Total Trades</div>
+      <div class="kpi-value" id="kTrades">—</div>
+      <div class="kpi-sub">simulated</div>
+    </div>
+    <div class="kpi" style="--accent:var(--green)">
+      <div class="kpi-label">Win Rate</div>
+      <div class="kpi-value" id="kWinRate">—</div>
+      <div class="kpi-sub">all-time</div>
+    </div>
+    <div class="kpi" style="--accent:var(--yellow)">
+      <div class="kpi-label">Net PnL</div>
+      <div class="kpi-value" id="kPnl">—</div>
+      <div class="kpi-sub">simulated %</div>
+    </div>
+    <div class="kpi" style="--accent:var(--purple)">
+      <div class="kpi-label">Stocks Tracked</div>
+      <div class="kpi-value" id="kSignals">—</div>
+      <div class="kpi-sub">universes</div>
+    </div>
+    <div class="kpi" style="--accent:var(--green)">
+      <div class="kpi-label">Bullish Now</div>
+      <div class="kpi-value" id="kBullish">—</div>
+      <div class="kpi-sub">win prob >50%</div>
+    </div>
+  </div>
+
+  <!-- Market Heatmap -->
+  <div class="panel" style="margin-bottom:16px">
+    <div class="panel-title">🌍 Market Heatmap — Average Win Probability by Region</div>
+    <div class="market-grid" id="marketGrid">
+      <div class="loading">Fetching markets</div>
+    </div>
+  </div>
+
+  <!-- Row: PnL Chart + Outcome Pie -->
+  <div class="row-2">
+    <div class="panel">
+      <div class="panel-title">📈 Cumulative Portfolio PnL (Simulated)</div>
+      <div class="chart-wrap-tall">
+        <canvas id="pnlChart"></canvas>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">🎯 Trade Outcome Distribution</div>
+      <div class="chart-wrap-tall">
+        <canvas id="pieChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row: Top Bullish + Win Prob Histogram -->
+  <div class="row-2" style="margin-bottom:16px">
+    <div class="panel">
+      <div class="panel-title">🏆 Top Bullish Signals — Right Now</div>
+      <div id="bullishTable"><div class="loading">Analyzing markets</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">📊 Win Probability Distribution (All Stocks)</div>
+      <div class="chart-wrap-tall">
+        <canvas id="histChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Trade Log -->
+  <div class="panel" style="margin-bottom:16px">
+    <div class="panel-title">📋 Recent Simulated Trades</div>
+    <div class="trade-scroll" id="tradeLog">
+      <div class="loading">Loading trades</div>
+    </div>
+  </div>
+
+  <!-- Paper Trading Unlock Status -->
+  <div class="row-2">
+    <div class="panel">
+      <div class="panel-title">🔒 Real Trading Unlock Progress</div>
+      <div id="paperStatus"><div class="loading">Checking criteria</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">⚡ Broker Connection Status</div>
+      <div id="brokerStatus"><div class="loading">Checking brokers</div></div>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  ⚠ FOR SIMULATION & EDUCATIONAL PURPOSES ONLY · NOT FINANCIAL ADVICE<br>
+  Algo Trader v2 · Updates daily at 18:30 IST · All markets covered
+</footer>
+
+<script>
+// ════════════════════════════════════════════════════════
+//  CHART DEFAULTS
+// ════════════════════════════════════════════════════════
+Chart.defaults.color          = '#64748b';
+Chart.defaults.borderColor    = '#1e293b';
+Chart.defaults.font.family    = "'Space Mono', monospace";
+Chart.defaults.font.size      = 10;
+
+const GREEN  = '#00ff88';
+const RED    = '#ff4757';
+const BLUE   = '#38bdf8';
+const PURPLE = '#a78bfa';
+const YELLOW = '#fbbf24';
+
+let pnlChart, pieChart, histChart;
+
+// ════════════════════════════════════════════════════════
+//  FETCH & RENDER
+// ════════════════════════════════════════════════════════
+async function loadAll() {
+  try {
+    const [summary, pnlHist, signals, trades] = await Promise.all([
+      fetch('/api/summary').then(r => r.json()),
+      fetch('/api/pnl_history').then(r => r.json()),
+      fetch('/api/signals').then(r => r.json()),
+      fetch('/api/trades').then(r => r.json()),
+    ]);
+
+    renderKPIs(summary);
+    renderMarkets(summary.market_summary);
+    renderBullishTable(summary.top_bullish);
+    renderPnlChart(pnlHist);
+    renderPieChart(summary.wins, summary.losses);
+    renderHistogram(signals);
+    renderTradeLog(trades);
+
+    document.getElementById('lastUpdate').textContent =
+      'UPDATED ' + new Date().toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit'}) + ' IST';
+
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+// ── KPIs ─────────────────────────────────────────────────
+function renderKPIs(s) {
+  document.getElementById('kTrades').textContent  = s.total_trades || 0;
+  document.getElementById('kSignals').textContent = s.total_signals || 0;
+  document.getElementById('kBullish').textContent = s.bullish_count || 0;
+
+  const wr = document.getElementById('kWinRate');
+  wr.textContent = (s.win_rate || 0) + '%';
+  wr.className   = 'kpi-value ' + (s.win_rate >= 50 ? 'green' : 'red');
+
+  const pnl = document.getElementById('kPnl');
+  pnl.textContent = (s.net_pnl >= 0 ? '+' : '') + (s.net_pnl || 0).toFixed(2) + '%';
+  pnl.className   = 'kpi-value ' + (s.net_pnl >= 0 ? 'green' : 'red');
+}
+
+// ── Market heatmap ────────────────────────────────────────
+function renderMarkets(markets) {
+  const el = document.getElementById('marketGrid');
+  if (!markets || !markets.length) {
+    el.innerHTML = '<div class="loading">No data yet</div>'; return;
+  }
+  el.innerHTML = markets.map(m => {
+    const pct   = m.avg_win_pct || 0;
+    const color = pct >= 60 ? GREEN : pct >= 50 ? BLUE : RED;
+    return `
+      <div class="market-card" style="border-color:${color}22">
+        <div class="market-name">${m.market}</div>
+        <div class="market-prob" style="color:${color}">${pct}%</div>
+        <div class="market-sub">${m.bullish}/${m.total} bullish</div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ── Top bullish table ─────────────────────────────────────
+function renderBullishTable(rows) {
+  const el = document.getElementById('bullishTable');
+  if (!rows || !rows.length) {
+    el.innerHTML = '<div class="loading">No data yet</div>'; return;
+  }
+  el.innerHTML = `
+    <table class="signal-table">
+      <thead>
+        <tr>
+          <th>#</th><th>Ticker</th><th>Market</th>
+          <th>Win Prob</th><th>RSI</th><th>Bias</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((r,i) => {
+          const prob = ((r.win_prob || 0) * 100).toFixed(1);
+          const barColor = r.win_prob > 0.6 ? GREEN : r.win_prob > 0.5 ? BLUE : RED;
+          const rsiColor = r.rsi < 30 ? GREEN : r.rsi > 70 ? RED : '';
+          return `
+            <tr>
+              <td style="color:var(--gray)">${i+1}</td>
+              <td class="ticker">${r.ticker}</td>
+              <td><span style="color:var(--lgray);font-size:10px">${r.market}</span></td>
+              <td>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <div class="prob-bar-wrap">
+                    <div class="prob-bar" style="width:${Math.min(prob,100)}%;background:${barColor}"></div>
+                  </div>
+                  <span style="color:${barColor};font-family:'Space Mono',monospace;font-size:11px">${prob}%</span>
+                </div>
+              </td>
+              <td style="color:${rsiColor || 'var(--lgray)'};font-family:'Space Mono',monospace">
+                ${r.rsi ? r.rsi.toFixed(1) : '—'}
+              </td>
+              <td><span class="badge badge-${r.bias === 'BULLISH' ? 'bull' : 'bear'}">${r.bias}</span></td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+// ── PnL curve chart ───────────────────────────────────────
+function renderPnlChart(history) {
+  const ctx = document.getElementById('pnlChart').getContext('2d');
+  if (pnlChart) pnlChart.destroy();
+
+  if (!history || !history.length) {
+    ctx.fillStyle = '#64748b'; ctx.font = "12px 'Space Mono'";
+    ctx.textAlign = 'center';
+    ctx.fillText('No trades yet — accumulating data...', ctx.canvas.width/2, 120);
+    return;
+  }
+
+  let cum = 0;
+  const labels  = history.map(h => h.date.slice(5));
+  const cumPnl  = history.map(h => { cum += h.daily_pnl; return +cum.toFixed(2); });
+  const posData = cumPnl.map(v => v >= 0 ? v : null);
+  const negData = cumPnl.map(v => v <  0 ? v : null);
+
+  pnlChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          data: cumPnl,
+          borderColor: BLUE, borderWidth: 2,
+          pointRadius: 0, tension: 0.3,
+          fill: { target: 'origin',
+            above: 'rgba(0,255,136,0.08)',
+            below: 'rgba(255,71,87,0.08)' },
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: '#1e293b' }, ticks: { maxTicksLimit: 8 } },
+        y: { grid: { color: '#1e293b' },
+             ticks: { callback: v => v.toFixed(1)+'%' } }
+      }
+    }
+  });
+}
+
+// ── Pie chart ─────────────────────────────────────────────
+function renderPieChart(wins, losses) {
+  const ctx = document.getElementById('pieChart').getContext('2d');
+  if (pieChart) pieChart.destroy();
+
+  if (!wins && !losses) {
+    ctx.fillStyle = '#64748b'; ctx.font = "12px 'Space Mono'";
+    ctx.textAlign = 'center';
+    ctx.fillText('No trades yet', ctx.canvas.width/2, 120);
+    return;
+  }
+
+  pieChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Wins', 'Losses'],
+      datasets: [{
+        data: [wins || 0, losses || 0],
+        backgroundColor: ['rgba(0,255,136,0.7)', 'rgba(255,71,87,0.7)'],
+        borderColor:     [GREEN, RED],
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      cutout: '65%',
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { color: '#94a3b8', padding: 16, font: { size: 11 } }
+        }
+      }
+    }
+  });
+}
+
+// ── Win prob histogram ────────────────────────────────────
+function renderHistogram(signals) {
+  const ctx = document.getElementById('histChart').getContext('2d');
+  if (histChart) histChart.destroy();
+
+  if (!signals || !signals.length) return;
+
+  const buckets = Array(10).fill(0);
+  signals.forEach(s => {
+    if (s.win_prob == null) return;
+    const b = Math.min(9, Math.floor(s.win_prob * 10));
+    buckets[b]++;
+  });
+
+  const labels = ['0-10%','10-20%','20-30%','30-40%','40-50%',
+                   '50-60%','60-70%','70-80%','80-90%','90-100%'];
+  const colors = buckets.map((_,i) =>
+    i >= 6 ? GREEN : i >= 5 ? BLUE : i >= 4 ? PURPLE : '#334155'
+  );
+
+  histChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: buckets,
+        backgroundColor: colors,
+        borderColor: '#080c14',
+        borderWidth: 1,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { maxRotation: 35, font: { size: 9 } } },
+        y: { grid: { color: '#1e293b' }, ticks: { stepSize: 1 } }
+      }
+    }
+  });
+}
+
+// ── Trade log ─────────────────────────────────────────────
+function renderTradeLog(trades) {
+  const el = document.getElementById('tradeLog');
+  if (!trades || !trades.length) {
+    el.innerHTML = '<div class="loading">No trades yet — auto-buy fires when win prob >60%</div>';
+    return;
+  }
+
+  el.innerHTML = `
+    <table class="signal-table">
+      <thead>
+        <tr>
+          <th>Ticker</th><th>Market</th><th>Entry</th><th>Exit</th>
+          <th>Entry Price</th><th>Exit Price</th><th>PnL %</th><th>Result</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${trades.slice(0,50).map(t => {
+          const pnlColor = t.pnl_pct >= 0 ? GREEN : RED;
+          return `
+            <tr>
+              <td class="ticker">${t.ticker}</td>
+              <td><span style="color:var(--lgray);font-size:10px">${t.market}</span></td>
+              <td style="font-family:'Space Mono',monospace;font-size:10px">${t.entry_date}</td>
+              <td style="font-family:'Space Mono',monospace;font-size:10px">${t.exit_date}</td>
+              <td style="font-family:'Space Mono',monospace">${(t.entry_price||0).toFixed(2)}</td>
+              <td style="font-family:'Space Mono',monospace">${(t.exit_price||0).toFixed(2)}</td>
+              <td style="color:${pnlColor};font-family:'Space Mono',monospace;font-weight:700">
+                ${t.pnl_pct >= 0 ? '+' : ''}${(t.pnl_pct||0).toFixed(2)}%
+              </td>
+              <td><span class="badge badge-${t.result === 'WIN' ? 'win' : 'loss'}">${t.result}</span></td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+// ── Paper trading unlock status ───────────────────────────
+function renderPaperStatus(s) {
+  const el = document.getElementById('paperStatus');
+  if (!s) { el.innerHTML = '<div class="loading">No data</div>'; return; }
+
+  const unlocked = s.unlocked;
+  const p = s.progress || {};
+  const checks = s.checks || {};
+
+  const criteria = [
+    { label: 'Total Trades',     val: p.trades,   ok: checks.trades_ok   },
+    { label: 'Win Rate',         val: p.win_rate,  ok: checks.winrate_ok  },
+    { label: 'Net PnL',          val: p.pnl,       ok: checks.pnl_ok      },
+    { label: 'Max Losing Streak',val: p.streak,    ok: checks.streak_ok   },
+    { label: 'Days Running',     val: p.days,      ok: checks.days_ok     },
+  ];
+
+  el.innerHTML = `
+    <div style="margin-bottom:14px;padding:12px 16px;border-radius:8px;
+                background:${unlocked ? 'rgba(0,255,136,0.08)' : 'rgba(255,71,87,0.06)'};
+                border:1px solid ${unlocked ? 'rgba(0,255,136,0.3)' : 'rgba(255,71,87,0.2)'}">
+      <div style="font-size:13px;font-weight:600;color:${unlocked ? GREEN : RED}">
+        ${s.message}
+      </div>
+    </div>
+    ${criteria.map(c => `
+      <div style="display:flex;justify-content:space-between;align-items:center;
+                  padding:7px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:12px;color:var(--lgray)">${c.label}</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-family:'Space Mono',monospace;font-size:11px;
+                       color:${c.ok ? GREEN : RED}">${c.val || '—'}</span>
+          <span style="font-size:14px">${c.ok ? '✅' : '❌'}</span>
+        </div>
+      </div>
+    `).join('')}
+    <div style="margin-top:10px;font-size:10px;color:var(--gray)">
+      Paper trades: ${s.total_trades} | Win rate: ${s.win_rate}% | Net PnL: ${s.net_pnl}%
+    </div>
+  `;
+}
+
+// ── Broker connection status ──────────────────────────────
+function renderBrokerStatus(b) {
+  const el = document.getElementById('brokerStatus');
+  if (!b) { el.innerHTML = '<div class="loading">No data</div>'; return; }
+
+  const modeColors = { paper: BLUE, zerodha: YELLOW, alpaca: PURPLE, both: GREEN };
+  const modeColor  = modeColors[b.mode] || BLUE;
+
+  el.innerHTML = `
+    <div style="margin-bottom:16px;text-align:center">
+      <div style="font-size:10px;color:var(--gray);letter-spacing:2px;margin-bottom:6px">EXECUTION MODE</div>
+      <div style="font-size:20px;font-weight:700;font-family:'Space Mono',monospace;
+                  color:${modeColor};letter-spacing:3px">${b.mode.toUpperCase()}</div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <!-- Zerodha -->
+      <div style="display:flex;justify-content:space-between;align-items:center;
+                  padding:12px 16px;border-radius:8px;background:var(--card);
+                  border:1px solid ${b.zerodha_ready ? 'rgba(0,255,136,0.25)' : 'var(--border)'}">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--white)">🇮🇳  Zerodha Kite</div>
+          <div style="font-size:10px;color:var(--gray);margin-top:2px">NSE · BSE  ·  ₹2000/year</div>
+        </div>
+        <div style="font-family:'Space Mono',monospace;font-size:11px;
+                    color:${b.zerodha_ready ? GREEN : RED}">
+          ${b.zerodha_ready ? '● CONNECTED' : '○ NOT CONNECTED'}
+        </div>
+      </div>
+
+      <!-- Alpaca -->
+      <div style="display:flex;justify-content:space-between;align-items:center;
+                  padding:12px 16px;border-radius:8px;background:var(--card);
+                  border:1px solid ${b.alpaca_ready ? 'rgba(56,189,248,0.25)' : 'var(--border)'}">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--white)">🇺🇸  Alpaca Markets</div>
+          <div style="font-size:10px;color:var(--gray);margin-top:2px">
+            US Stocks  ·  FREE API  ·  ${b.alpaca_paper ? '📝 PAPER MODE' : '🔴 LIVE MODE'}
+          </div>
+        </div>
+        <div style="font-family:'Space Mono',monospace;font-size:11px;
+                    color:${b.alpaca_ready ? BLUE : RED}">
+          ${b.alpaca_ready ? '● CONNECTED' : '○ NOT CONNECTED'}
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:14px;font-size:10px;color:var(--gray);line-height:1.6">
+      Set <code style="color:var(--blue)">EXECUTION_MODE</code> env var to:
+      <code style="color:var(--yellow)">paper</code> |
+      <code style="color:var(--yellow)">zerodha</code> |
+      <code style="color:var(--yellow)">alpaca</code> |
+      <code style="color:var(--yellow)">both</code>
+    </div>
+  `;
+}
+  try {
+    const [summary, pnlHist, signals, trades, paper, broker] = await Promise.all([
+      fetch('/api/summary').then(r => r.json()),
+      fetch('/api/pnl_history').then(r => r.json()),
+      fetch('/api/signals').then(r => r.json()),
+      fetch('/api/trades').then(r => r.json()),
+      fetch('/api/paper_status').then(r => r.json()),
+      fetch('/api/broker_status').then(r => r.json()),
+    ]);
+
+    renderKPIs(summary);
+    renderMarkets(summary.market_summary);
+    renderBullishTable(summary.top_bullish);
+    renderPnlChart(pnlHist);
+    renderPieChart(summary.wins, summary.losses);
+    renderHistogram(signals);
+    renderTradeLog(trades);
+    renderPaperStatus(paper);
+    renderBrokerStatus(broker);
+
+    document.getElementById('lastUpdate').textContent =
+      'UPDATED ' + new Date().toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit'}) + ' IST';
+  } catch(e) { console.error(e); }
+}
+</script>
+</body>
+</html>
