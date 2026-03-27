@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: algo-trader
+    env: python
+    region: singapore          # closest to India (low latency)
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --workers 1 --threads 2 --timeout 120 --bind 0.0.0.0:$PORT
+    envVars:
+      - key: EMAIL_SENDER
+        sync: false            # set in Render dashboard
+      - key: EMAIL_PASSWORD
+        sync: false
+      - key: EMAIL_RECIPIENT
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+    disk:
+      name: algo-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
