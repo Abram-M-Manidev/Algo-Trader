@@ -58,6 +58,14 @@ def serve_report(filename):
     path = os.path.join("reports", filename)
     if not os.path.exists(path): abort(404)
     return send_file(path, mimetype="image/png")
+@app.route("/run-now")
+def run_now():
+    import threading
+    from scheduler import run_daily_analysis
+    t = threading.Thread(target=run_daily_analysis)
+    t.daemon = True
+    t.start()
+    return jsonify({"status": "Analysis started in background"}), 200
 
 @app.route("/health")
 def health(): return jsonify({"status": "ok", "service": "algo-trader"}), 200
