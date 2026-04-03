@@ -34,22 +34,49 @@ TICKER_TO_MARKET = {
 # ════════════════════════════════════════════════════════════
 def fetch_data(ticker: str) -> pd.DataFrame | None:
     try:
-        df = yf.download(
-            ticker,
-            period=f"{LOOKBACK_DAYS}d",
-            interval="1d",
-            progress=False,
-            auto_adjust=True,
+        import requests
+        clean = ticker.replace(".NS","").replace(".BO","")
+        url = (
+            f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
+            f"?interval=1d&range=90d"
         )
-        if df.empty or len(df) < 30:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json",
+        }
+        r = requests.get(url, headers=headers, timeout=15)
+        if r.status_code != 200:
             return None
-
-        # Flatten MultiIndex columns
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-
+        
+        data = r.json()
+        result = data["chart"]["result"]
+        if not result:
+            return None
+        
+        quotes = result[0]
+        timestamps = quotes["timestamp"]
+        ohlcv = quotes["indicators"]["quote"][0]
+        
+        import pandas as pd
+        from datetime import datetime
+        
+        df = pd.DataFrame({
+            "Open":   ohlcv.get("open",   []),
+            "High":   ohlcv.get("high",   []),
+            "Low":    ohlcv.get("low",    []),
+            "Close":  ohlcv.get("close",  []),
+            "Volume": ohlcv.get("volume", []),
+        }, index=pd.to_datetime(
+            [datetime.fromtimestamp(t) for t in timestamps]
+        ))
+        
         df.dropna(inplace=True)
+        if len(df) < 30:
+            return None
         return df
+
     except Exception as e:
         print(f"    ⚠  Fetch error [{ticker}]: {e}")
         return None
