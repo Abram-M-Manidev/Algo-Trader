@@ -107,6 +107,7 @@ def api_kite_token(request_token):
         return jsonify({"error": str(e)}), 500
 
 # Start scheduler once (safe for gunicorn single-worker)
+os.makedirs("data", exist_ok=True)
 init_db()
 from scheduler import create_scheduler
 _scheduler = create_scheduler()
